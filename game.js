@@ -36,6 +36,7 @@ constructor() {
     // Create fruits
     this.fruits = [];
     this.soundManager = new SoundManager();
+    this.particles = [];
     this.score = 0;
     
     console.log('Initial score:', this.score);
@@ -140,6 +141,25 @@ generateFruits(count) {
         this.fruits.push(new Fruit(x, y, type));
     }
 }
+
+/**
+ * Spawn particles for visual feedback
+ * 
+ * @param {number} x - Center X position
+ * @param {number} y - Center Y position
+ * @param {string} color - Particle color
+ * @param {number} count - How many particles to spawn
+ * 
+ * DESIGN PATTERN: Particle spawning
+ * - Creates multiple particles at once
+ * - Random velocities create explosion effect
+ * - Color matches the source (fruit color)
+ */
+spawnParticles(x, y, color, count = 10) {
+    for (let i = 0; i < count; i++) {
+        this.particles.push(new Particle(x, y, color));
+    }
+}
     
     /**
      * Process input and update player velocity
@@ -188,9 +208,18 @@ generateFruits(count) {
             fruit.collected = true;
             this.score += 10;
             this.soundManager.playCollect();
+
+            // Spawn particles at fruit center
+            const centerX = fruit.x + fruit.width / 2;
+            const centerY = fruit.y + fruit.height / 2;
+            this.spawnParticles(centerX, centerY, fruit.color, 12); 
             console.log(`🍎 Frame ${this.frameCount}: Collected ${fruit.type} at (${Math.floor(fruit.x)}, ${Math.floor(fruit.y)})! Score: ${this.score}`);
         }
     });
+
+    //Update particles and remove dead ones
+    //filter() keeps only particles that return true from update() (still alive)
+    this.particles = this.particles.filter(particle => particle.update());
 }
     
     /**
@@ -206,6 +235,9 @@ render() {
     
     // Render fruits
     this.fruits.forEach(fruit => fruit.render(this.ctx));
+    
+    // Render particles (on top of fruits but below player)
+    this.particles.forEach(particle => particle.render(this.ctx));  
     
     // Render player (player on top of fruits)
     this.player.render(this.ctx);
