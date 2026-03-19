@@ -97,6 +97,34 @@ constructor() {
  * - Ensures fruits don't spawn on top of player
  * - Uses minimum distance check (Pythagorean theorem)
  */
+/**
+ * Select a random rarity based on weighted probabilities
+ * 
+ * ALGORITHM: Weighted Random Selection
+ * - Common: 70%
+ * - Rare: 20%
+ * - Epic: 8%
+ * - Legendary: 2%
+ * 
+ * HOW IT WORKS:
+ * - Generate random number 0-100
+ * - Check which range it falls into
+ * - Return corresponding rarity
+ * 
+ * This is the SAME algorithm used in:
+ * - Loot boxes
+ * - Gacha games
+ * - Random drops in RPGs
+ */
+getRandomRarity() {
+    const roll = Math.random() * 100;  // 0-100
+    
+    if (roll < 60) return 'common';      // 0-60 (60%)
+    if (roll < 85) return 'rare';        // 60-85 (25%)
+    if (roll < 95) return 'epic';        // 85-95 (10%)
+    return 'legendary';                   // 95-100 (5%)
+}
+
 generateFruits(count) {
     const fruitTypes = ['apple', 'orange', 'banana', 'grape','watermelon','blueberry','strawberry','kiwi','pineapple','golden'];
     
@@ -137,8 +165,8 @@ generateFruits(count) {
         
         // Random fruit type
         const type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
-        
-        this.fruits.push(new Fruit(x, y, type));
+        const rarity = this.getRandomRarity();
+        this.fruits.push(new Fruit(x, y, type, rarity));
     }
 }
 
@@ -205,16 +233,17 @@ spawnParticles(x, y, color, count = 10) {
     // Check fruit collisions
     this.fruits.forEach(fruit => {
         if (!fruit.collected && fruit.checkCollision(this.player)) {
-            fruit.collected = true;
-            this.score += 10;
-            this.soundManager.playCollect();
-
-            // Spawn particles at fruit center
-            const centerX = fruit.x + fruit.width / 2;
-            const centerY = fruit.y + fruit.height / 2;
-            this.spawnParticles(centerX, centerY, fruit.color, 12); 
-            console.log(`🍎 Frame ${this.frameCount}: Collected ${fruit.type} at (${Math.floor(fruit.x)}, ${Math.floor(fruit.y)})! Score: ${this.score}`);
-        }
+    fruit.collected = true;
+    this.score += fruit.points;  // ← Use fruit's points (10, 25, 50, or 100)
+    this.soundManager.playCollect();
+    
+    const centerX = fruit.x + fruit.width / 2;
+    const centerY = fruit.y + fruit.height / 2;
+    this.spawnParticles(centerX, centerY, fruit.color, fruit.particleCount);  // ← Use fruit's particle count
+    
+    // Enhanced logging with rarity
+    console.log(`🍎 Collected ${fruit.rarity} ${fruit.type}! +${fruit.points} points. Score: ${this.score}`);
+}
     });
 
     //Update particles and remove dead ones
@@ -238,7 +267,7 @@ render() {
     
     // Render particles (on top of fruits but below player)
     this.particles.forEach(particle => particle.render(this.ctx));  
-    
+
     // Render player (player on top of fruits)
     this.player.render(this.ctx);
     

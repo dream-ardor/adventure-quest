@@ -24,12 +24,12 @@ class Particle {
         // Random velocity in all directions
         // Math.random() - 0.5 gives range [-0.5, 0.5]
         // Multiply by 6 for range [-3, 3]
-        this.velocityX = (Math.random() - 0.5) * 6;
+        this.velocityX = (Math.random() - 0.5) * 12;
         this.velocityY = (Math.random() - 0.5) * 6 - 2;  // Bias upward (subtract 2)
         
         // Particle properties
         this.life = 1.0;  // Full life (will fade to 0)
-        this.fadeRate = 0.02;  // How fast it fades (higher = faster)
+        this.fadeRate = 0.01;  // How fast it fades (higher = faster)
         this.size = Math.random() * 4 + 2;  // Random size between 2-6 pixels
         this.color = color;
         
