@@ -41,6 +41,14 @@ constructor() {
     
     console.log('Initial score:', this.score);
     
+    // Celebration system
+    this.isCelebrating = false;
+    this.celebrationTimer = 0;
+    this.celebrationDuration = 30;  // frames (0.5 seconds at 60fps)
+    this.nextMilestone = 250;  // First milestone at 250 points
+    this.milestones = [250, 500, 750, 1000, 1500, 2000];  // All milestones
+
+
     this.generateFruits(105);
     
     console.log('Fruits generated:', this.fruits.length);
@@ -188,6 +196,110 @@ spawnParticles(x, y, color, count = 10) {
         this.particles.push(new Particle(x, y, color));
     }
 }
+
+/**
+ * Trigger a milestone celebration
+ * 
+ * STATE MACHINE: PLAYING → CELEBRATING
+ * - Pauses normal gameplay
+ * - Spawns celebration effects
+ * - Plays celebration sound
+ */
+triggerCelebration() {
+    this.isCelebrating = true;
+    this.celebrationTimer = this.celebrationDuration;
+    
+    console.log(`🎉 MILESTONE REACHED: ${this.nextMilestone} points!`);
+    
+    // Spawn firework particles from center of screen
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    // Create 50 colorful particles in random directions
+    for (let i = 0; i < 50; i++) {
+        // Random rainbow colors for fireworks
+        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        // Create particle with extra velocity for explosion effect
+        const particle = new Particle(centerX, centerY, randomColor);
+        particle.velocityX *= 2;  // Double the velocity for bigger explosion
+        particle.velocityY *= 2;
+        particle.velocityY -= 3;  // Extra upward bias
+        particle.size *= 1.5;     // Bigger particles
+        
+        this.particles.push(particle);
+    }
+    
+    // Play celebration sound
+    this.soundManager.playCelebration();
+    
+    // Find next milestone
+    for (let milestone of this.milestones) {
+        if (milestone > this.score) {
+            this.nextMilestone = milestone;
+            break;
+        }
+    }
+}
+
+/**
+ * Update celebration state
+ * 
+ * STATE MACHINE: CELEBRATING → PLAYING
+ * - Counts down timer
+ * - When timer reaches 0, resume gameplay
+ */
+updateCelebration() {
+    if (!this.isCelebrating) return;
+    
+    this.celebrationTimer--;
+    
+    if (this.celebrationTimer <= 0) {
+        this.isCelebrating = false;
+        console.log('🎮 Celebration ended - gameplay resumed');
+    }
+}
+
+/**
+ * Render celebration overlay
+ * 
+ * VISUAL EFFECTS:
+ * - Screen flash (white fade)
+ * - Milestone text
+ * - Particle explosion (already rendering)
+ */
+renderCelebration() {
+    if (!this.isCelebrating) return;
+    
+    // Calculate flash intensity (fade from bright to invisible)
+    const flashIntensity = this.celebrationTimer / this.celebrationDuration;
+    
+    // White screen flash
+    this.ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.4})`;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Milestone text
+    this.ctx.fillStyle = 'white';
+    this.ctx.strokeStyle = '#2d3748';
+    this.ctx.lineWidth = 4;
+    this.ctx.font = 'bold 48px Arial';
+    this.ctx.textAlign = 'center';
+    
+    const text = `MILESTONE!`;
+    const scoreText = `${this.score} POINTS`;
+    
+    // Text with outline for visibility
+    this.ctx.strokeText(text, this.canvas.width / 2, this.canvas.height / 2 - 30);
+    this.ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2 - 30);
+    
+    this.ctx.font = 'bold 32px Arial';
+    this.ctx.strokeText(scoreText, this.canvas.width / 2, this.canvas.height / 2 + 20);
+    this.ctx.fillText(scoreText, this.canvas.width / 2, this.canvas.height / 2 + 20);
+    
+    // Reset text alignment
+    this.ctx.textAlign = 'left';
+}
     
     /**
      * Process input and update player velocity
@@ -227,6 +339,16 @@ spawnParticles(x, y, color, count = 10) {
         console.log(`Frame ${this.frameCount}: Score = ${this.score}, Player = (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})`);
     }
     
+    // Update celebration state
+    this.updateCelebration();   
+
+        // If celebrating, skip normal updates (pause gameplay)     
+     if (this.isCelebrating) {
+        // Still update particles so fireworks animate
+        this.particles = this.particles.filter(particle => particle.update());
+        return;  // Skip player movement and fruit collection
+    }
+
     this.processInput();
     this.player.update(this.canvas.width, this.canvas.height);
     
@@ -235,7 +357,7 @@ spawnParticles(x, y, color, count = 10) {
         if (!fruit.collected && fruit.checkCollision(this.player)) {
     fruit.collected = true;
     this.score += fruit.points;  // ← Use fruit's points (10, 25, 50, or 100)
-    this.soundManager.playCollect();
+    this.soundManager.playCollect(fruit.rarity);  // ← Play sound based on rarity   
     
     const centerX = fruit.x + fruit.width / 2;
     const centerY = fruit.y + fruit.height / 2;
@@ -245,6 +367,11 @@ spawnParticles(x, y, color, count = 10) {
     console.log(`🍎 Collected ${fruit.rarity} ${fruit.type}! +${fruit.points} points. Score: ${this.score}`);
 }
     });
+
+    // Check for milestone achievements
+    if (this.score >= this.nextMilestone && !this.isCelebrating) {
+      this.triggerCelebration();
+    }
 
     //Update particles and remove dead ones
     //filter() keeps only particles that return true from update() (still alive)
@@ -281,6 +408,9 @@ render() {
     this.ctx.fillText(`Player: ${Math.floor(this.player.x)}, ${Math.floor(this.player.y)}`, 20, 70);
     this.ctx.fillText(`Fruits remaining: ${this.fruits.filter(f => !f.collected).length}`, 20, 90);
     this.ctx.fillText(`Velocity: ${this.player.velocityX.toFixed(2)}, ${this.player.velocityY.toFixed(2)}`, 20, 110);
+
+    // Render celebration effects on top of everything
+    this.renderCelebration();
 }
     /**
      * Main game loop

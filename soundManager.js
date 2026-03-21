@@ -55,38 +55,64 @@ ensureReady() {
     return this.audioContext.state === 'running';
 }
     
-    /**
-     * Play a collect sound
-     * 
-     * SOUND DESIGN: Short, high-pitched, pleasant
-     * - Frequency: 800 Hz (higher = brighter, happier)
-     * - Duration: 0.1 seconds (quick feedback)
-     * - Type: 'sine' wave (smoothest, most pleasant)
-     */
-    playCollect() {
-        if (!this.ensureReady()) return;
-        
-        const now = this.audioContext.currentTime;
-        
-        // Create oscillator (the tone generator)
+/**
+ * Play collect sound based on rarity
+ * 
+ * @param {string} rarity - 'common', 'rare', 'epic', or 'legendary'
+ * 
+ * SOUND DESIGN:
+ * - Common: Single note (current)
+ * - Rare: Two ascending notes
+ * - Epic: Three note flourish
+ * - Legendary: Full fanfare (4 notes)
+ */
+playCollect(rarity = 'common') {
+    if (!this.ensureReady()) return;
+    
+    const now = this.audioContext.currentTime;
+    
+    // Different sound patterns for each rarity
+    let frequencies = [];
+    let durations = [];
+    
+    switch(rarity) {
+        case 'common':
+            frequencies = [800];
+            durations = [0.1];
+            break;
+        case 'rare':
+            frequencies = [800, 1000];
+            durations = [0.08, 0.08];
+            break;
+        case 'epic':
+            frequencies = [800, 1000, 1200];
+            durations = [0.06, 0.06, 0.1];
+            break;
+        case 'legendary':
+            frequencies = [800, 1000, 1200, 1600];
+            durations = [0.06, 0.06, 0.06, 0.15];
+            break;
+    }
+    
+    // Play each note in sequence
+    frequencies.forEach((freq, index) => {
         const oscillator = this.audioContext.createOscillator();
-        oscillator.type = 'sine';  // Smooth, pure tone
-        oscillator.frequency.setValueAtTime(1200, now);  // 1200 Hz
+        oscillator.type = 'sine';
         
-        // Create gain node (volume control)
+        const startTime = now + (index * 0.08);  // Stagger notes slightly
+        oscillator.frequency.setValueAtTime(freq, startTime);
+        
         const gainNode = this.audioContext.createGain();
-        gainNode.gain.setValueAtTime(0.3, now);  // Start at 30% volume
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);  // Fade out
+        gainNode.gain.setValueAtTime(0.3, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + durations[index]);
         
-        // Connect the chain: Oscillator → Gain → Speakers
         oscillator.connect(gainNode);
         gainNode.connect(this.audioContext.destination);
         
-        // Start and stop
-        oscillator.start(now);
-        oscillator.stop(now + 0.2);  // Stop after 0.2 seconds
-    }
-    
+        oscillator.start(startTime);
+        oscillator.stop(startTime + durations[index]);
+    });
+}
     /**
      * Play game start sound
      * 
@@ -113,4 +139,36 @@ ensureReady() {
         oscillator.start(now);
         oscillator.stop(now + 0.2);
     }
+/**
+ * Play celebration sound (milestone fanfare)
+ * 
+ * SOUND DESIGN: Triumphant ascending notes
+ * - Creates sense of achievement
+ * - More complex than simple beeps
+ */
+playCelebration() {
+    if (!this.ensureReady()) return;
+    
+    const now = this.audioContext.currentTime;
+    
+    // Play three ascending notes (major chord)
+    const frequencies = [523, 659, 784];  // C, E, G (major chord)
+    
+    frequencies.forEach((freq, index) => {
+        const oscillator = this.audioContext.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(freq, now + index * 0.1);
+        
+        const gainNode = this.audioContext.createGain();
+        gainNode.gain.setValueAtTime(0.3, now + index * 0.1);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + index * 0.1 + 0.3);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+        
+        oscillator.start(now + index * 0.1);
+        oscillator.stop(now + index * 0.1 + 0.3);
+    });
+}
+
 }
