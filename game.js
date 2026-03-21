@@ -235,11 +235,18 @@ triggerCelebration() {
     this.soundManager.playCelebration();
     
     // Find next milestone
+    let foundNext = false
     for (let milestone of this.milestones) {
         if (milestone > this.score) {
             this.nextMilestone = milestone;
+            foundNext = true;
             break;
         }
+    }
+
+    if (!foundNext) {
+        this.nextMilestone = Math.ceil((this.score + 1) / 500) * 500;  // Next milestone at next 500 points
+        console.log(`🎊 New milestone generated: ${this.nextMilestone}`);
     }
 }
 
@@ -342,14 +349,21 @@ renderCelebration() {
     // Update celebration state
     this.updateCelebration();   
 
+    //Always process input and update particles, even during celebration, to keep things responsive and animated        
+    this.processInput();
+
         // If celebrating, skip normal updates (pause gameplay)     
      if (this.isCelebrating) {
         // Still update particles so fireworks animate
         this.particles = this.particles.filter(particle => particle.update());
+
+        //Stop player movement during celebration for better visual focus
+        this.player.velocityX = 0;
+        this.player.velocityY = 0; 
+
         return;  // Skip player movement and fruit collection
     }
 
-    this.processInput();
     this.player.update(this.canvas.width, this.canvas.height);
     
     // Check fruit collisions
@@ -403,12 +417,10 @@ render() {
     this.ctx.font = '24px Arial';
     this.ctx.fillText(`Score: ${this.score}`, 20, 40);
     
-    // DEBUG INFO
-    this.ctx.font = '14px Arial';
-    this.ctx.fillText(`Player: ${Math.floor(this.player.x)}, ${Math.floor(this.player.y)}`, 20, 70);
-    this.ctx.fillText(`Fruits remaining: ${this.fruits.filter(f => !f.collected).length}`, 20, 90);
-    this.ctx.fillText(`Velocity: ${this.player.velocityX.toFixed(2)}, ${this.player.velocityY.toFixed(2)}`, 20, 110);
-
+    // Player UI
+this.ctx.font = '18px Arial';
+this.ctx.fillText(`Next Milestone: ${this.nextMilestone}`, 20, 70);
+this.ctx.fillText(`Fruits: ${this.fruits.filter(f => !f.collected).length}/${this.fruits.length}`, 20, 95);
     // Render celebration effects on top of everything
     this.renderCelebration();
 }
