@@ -48,6 +48,11 @@ constructor() {
     this.nextMilestone = 250;  // First milestone at 250 points
     this.milestones = [250, 500, 750, 1000, 1500, 2000];  // All milestones
 
+    //Victory system
+    this.isVictory = false;
+    this.victoryTimer = 0;
+    this.victoryDuration = 120; // 2 seconds at 60fps
+    this.showVictoryScreen = false;
 
     this.generateFruits(105);
     
@@ -61,12 +66,64 @@ constructor() {
     
     // Setup input listeners
     this.setupInput();
+    this.setupMouseInput();
     
     // Start the game loop
     this.start();
     
     console.log('═══════════════════════════════════════');
 }
+    /**
+ * Draw text that automatically scales to fit within a maximum width
+ * 
+ * RESPONSIVE DESIGN: Prevents text overflow
+ * - Measures text width at desired font size
+ * - Scales down if too wide
+ * - Has minimum font size to prevent illegibility
+ * 
+ * @param {string} text - Text to draw
+ * @param {number} x - X position (center)
+ * @param {number} y - Y position
+ * @param {number} maxWidth - Maximum width allowed (pixels)
+ * @param {number} desiredSize - Desired font size (will scale down if needed)
+ * @param {string} weight - Font weight ('normal', 'bold')
+ * @param {string} color - Fill color
+ * @param {boolean} stroke - Whether to add outline
+ */
+drawResponsiveText(text, x, y, maxWidth, desiredSize, weight = 'bold', color = 'white', stroke = false) {
+    // Start with desired font size
+    let fontSize = desiredSize;
+    this.ctx.font = `${weight} ${fontSize}px Arial`;
+    
+    // Measure how wide the text would be
+    let textWidth = this.ctx.measureText(text).width;
+    
+    // If text is too wide, scale down the font size
+    if (textWidth > maxWidth) {
+        // Calculate scaling factor
+        fontSize = Math.floor((maxWidth / textWidth) * fontSize);
+        
+        // Set minimum font size for readability
+        const minFontSize = 20;
+        fontSize = Math.max(fontSize, minFontSize);
+        
+        this.ctx.font = `${weight} ${fontSize}px Arial`;
+    }
+    
+    // Draw the text
+    if (stroke) {
+        this.ctx.strokeStyle = '#2d3748';
+        this.ctx.lineWidth = Math.max(2, fontSize / 20);  // Scale stroke with font
+        this.ctx.strokeText(text, x, y);
+    }
+    
+    this.ctx.fillStyle = color;
+    this.ctx.fillText(text, x, y);
+    
+    // Return actual font size used (useful for positioning other elements)
+    return fontSize;
+}
+
     
     /**
      * Setup keyboard input
@@ -87,6 +144,12 @@ constructor() {
                 this.soundManager.playStart();
             }
 
+            //Restart game on spacebar if victory screen is showing
+            if (e.key === ' ' && this.showVictoryScreen) {
+                e.preventDefault();
+                this.restartGame();
+            }
+
 
             this.keys[e.key] = true;
         });
@@ -95,6 +158,38 @@ constructor() {
             this.keys[e.key] = false;
         });
     }
+
+    /**
+ * Setup mouse input for UI interactions
+ * 
+ * INTERACTION: Click "Play Again" button
+ */
+setupMouseInput() {
+    this.canvas.addEventListener('click', (e) => {
+        // Only handle clicks when victory screen is showing
+        if (!this.showVictoryScreen) return;
+        
+        // Get mouse position relative to canvas
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Calculate button position and size (same as in renderVictoryScreen)
+        const buttonWidth = Math.min(300, this.canvas.width * 0.4);
+        const buttonHeight = 60;
+        const buttonX = this.canvas.width / 2 - buttonWidth / 2;
+        const buttonY = this.canvas.height * 0.72;  // 72% down
+        
+        if (mouseX >= buttonX && 
+            mouseX <= buttonX + buttonWidth &&
+            mouseY >= buttonY && 
+            mouseY <= buttonY + buttonHeight) {
+            
+            console.log('🖱️ Play Again button clicked');
+            this.restartGame();
+        }
+    });
+}
     
    /**
  * Generate random fruits on the map
@@ -286,28 +381,38 @@ renderCelebration() {
     this.ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.4})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    // Milestone text
-    this.ctx.fillStyle = 'white';
-    this.ctx.strokeStyle = '#2d3748';
-    this.ctx.lineWidth = 4;
-    this.ctx.font = 'bold 48px Arial';
+    // Milestone text (responsive)
     this.ctx.textAlign = 'center';
-    
-    const text = `MILESTONE!`;
-    const scoreText = `${this.score} POINTS`;
-    
-    // Text with outline for visibility
-    this.ctx.strokeText(text, this.canvas.width / 2, this.canvas.height / 2 - 30);
-    this.ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2 - 30);
-    
-    this.ctx.font = 'bold 32px Arial';
-    this.ctx.strokeText(scoreText, this.canvas.width / 2, this.canvas.height / 2 + 20);
-    this.ctx.fillText(scoreText, this.canvas.width / 2, this.canvas.height / 2 + 20);
-    
-    // Reset text alignment
-    this.ctx.textAlign = 'left';
-}
-    
+
+   const maxWidth = this.canvas.width * 0.9;
+   const centerX = this.canvas.width / 2;
+const centerY = this.canvas.height / 2;
+
+   this.drawResponsiveText(
+    'MILESTONE!',
+    centerX,
+    centerY - 30,
+    maxWidth,
+    48,
+    'bold',
+    'white',
+    true  // Add stroke
+);
+
+   this.drawResponsiveText(
+    `${this.score} POINTS`,
+    centerX,
+    centerY + 20,
+    maxWidth,
+    32,
+    'bold',
+    'white',
+    true  // Add stroke
+);
+
+// Reset text alignment
+   this.ctx.textAlign = 'left';
+}  
     /**
      * Process input and update player velocity
      * 
@@ -335,6 +440,261 @@ renderCelebration() {
     }
     
     /**
+ * Trigger victory sequence
+ * 
+ * STATE TRANSITION: PLAYING → VICTORY
+ * - Final celebration
+ * - Victory timer countdown
+ * - Then show victory screen
+ */
+triggerVictory() {
+    this.isVictory = true;
+    this.victoryTimer = this.victoryDuration;
+    
+    console.log('🏆 VICTORY! All fruits collected!');
+    
+    // Massive celebration explosion
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    // Create 100 rainbow particles for epic victory celebration
+    for (let i = 0; i < 100; i++) {
+        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565', '#fbbf24'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        const particle = new Particle(centerX, centerY, randomColor);
+        particle.velocityX *= 3;  // Even bigger explosion than milestone
+        particle.velocityY *= 3;
+        particle.velocityY -= 4;  // Extra upward force
+        particle.size *= 2;       // Larger particles
+        particle.fadeRate = 0.015;  // Fade slower (linger longer)
+        
+        this.particles.push(particle);
+    }
+    
+    // Play celebration sound
+    this.soundManager.playCelebration();
+    
+    // After a delay, we'll stop playing the sound repeatedly
+    // by checking if victory screen is showing
+}
+
+/**
+ * Update victory state
+ * 
+ * STATE PROGRESSION: VICTORY → VICTORY_SCREEN
+ */
+updateVictory() {
+    if (!this.isVictory) return;
+    
+    this.victoryTimer--;
+    
+    if (this.victoryTimer <= 0) {
+        this.showVictoryScreen = true;
+        console.log('🎊 Showing victory screen');
+    }
+}
+
+/**
+ * Render victory overlay
+ * 
+ * VISUAL ELEMENTS:
+ * - Screen flash (gold)
+ * - Victory text
+ * - Final score
+ * - Play again button (when timer expires)
+ */
+renderVictory() {
+    if (!this.isVictory) return;
+    
+    // Gold screen flash during initial celebration
+    if (!this.showVictoryScreen) {
+        const flashIntensity = this.victoryTimer / this.victoryDuration;
+        this.ctx.fillStyle = `rgba(251, 191, 36, ${flashIntensity * 0.3})`;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Victory text during celebration
+        this.ctx.textAlign = 'center';
+        
+        const maxWidth = this.canvas.width * 0.9;
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        this.drawResponsiveText(
+            'VICTORY!',
+            centerX,
+            centerY,
+            maxWidth,
+            64,
+            'bold',
+            'white',
+            true
+        );
+        
+        this.ctx.textAlign = 'left';
+    } else {
+        // Full victory screen
+        this.renderVictoryScreen();
+    }
+}
+
+/**
+ * Render full victory screen with restart option
+ * 
+ * RESPONSIVE DESIGN: All text scales based on canvas size
+ */
+renderVictoryScreen() {
+    // Semi-transparent dark overlay
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Set text alignment for centered text
+    this.ctx.textAlign = 'center';
+    
+    // Calculate maximum widths based on canvas size
+    const maxWidth = this.canvas.width * 0.9;  // 90% of canvas width
+    const centerX = this.canvas.width / 2;
+    
+    // Title - "ALL FRUITS COLLECTED!"
+    // Desired size: 72px, but will scale down if needed
+    this.drawResponsiveText(
+        'ALL FRUITS COLLECTED!',
+        centerX,
+        this.canvas.height * 0.25,  // 25% down from top
+        maxWidth,
+        72,
+        'bold',
+        '#fbbf24',  // Gold
+        false
+    );
+    
+    // Final Score
+    // Desired size: 48px
+    this.drawResponsiveText(
+        `Final Score: ${this.score}`,
+        centerX,
+        this.canvas.height * 0.42,  // 42% down from top
+        maxWidth,
+        48,
+        'bold',
+        'white',
+        false
+    );
+    
+    // Fruits Collected
+    this.drawResponsiveText(
+        `Fruits Collected: ${this.fruits.length}`,
+        centerX,
+        this.canvas.height * 0.53,  // 53% down
+        maxWidth,
+        24,
+        'normal',
+        'white',
+        false
+    );
+    
+    // Calculate rarity breakdown
+    const rarityCount = {
+        common: 0,
+        rare: 0,
+        epic: 0,
+        legendary: 0
+    };
+    
+    this.fruits.forEach(fruit => {
+        rarityCount[fruit.rarity]++;
+    });
+    
+    // Rarity stats
+    this.drawResponsiveText(
+        `Common: ${rarityCount.common} | Rare: ${rarityCount.rare} | Epic: ${rarityCount.epic} | Legendary: ${rarityCount.legendary}`,
+        centerX,
+        this.canvas.height * 0.62,  // 62% down
+        maxWidth,
+        20,
+        'normal',
+        'white',
+        false
+    );
+    
+    // Play Again Button
+    // Scale button size based on canvas
+    const buttonWidth = Math.min(300, this.canvas.width * 0.4);
+    const buttonHeight = 60;
+    const buttonX = centerX - buttonWidth / 2;
+    const buttonY = this.canvas.height * 0.72;  // 72% down
+    
+    // Draw button
+    this.ctx.fillStyle = '#48bb78';  // Green
+    this.ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+    
+    // Button text
+    this.drawResponsiveText(
+        'PLAY AGAIN',
+        centerX,
+        buttonY + buttonHeight / 2 + 12,  // Center vertically in button
+        buttonWidth * 0.9,
+        32,
+        'bold',
+        'white',
+        false
+    );
+    
+    // Instructions
+    this.drawResponsiveText(
+        'Click button or press SPACE to restart',
+        centerX,
+        this.canvas.height * 0.87,  // 87% down
+        maxWidth,
+        18,
+        'normal',
+        '#a0aec0',
+        false
+    );
+    
+    // Reset text alignment
+    this.ctx.textAlign = 'left';
+}
+
+/**
+ * Restart the game
+ * 
+ * STATE TRANSITION: VICTORY → PLAYING
+ * - Reset score
+ * - Clear particles
+ * - Regenerate fruits
+ * - Reset milestones
+ * - Resume gameplay
+ */
+   restartGame() {
+    console.log('🔄 Restarting game...');
+    
+    // Reset game state
+    this.score = 0;
+    this.isVictory = false;
+    this.showVictoryScreen = false;
+    this.victoryTimer = 0;
+    this.isCelebrating = false;
+    this.celebrationTimer = 0;
+    this.nextMilestone = 250;
+    
+    // Clear particles
+    this.particles = [];
+    
+    // Clear old fruits and generate new ones
+    this.fruits = [];
+    this.generateFruits(105);
+    
+    // Reset player to center
+    this.player.x = this.canvas.width / 2 - 16;
+    this.player.y = this.canvas.height / 2 - 16;
+    this.player.velocityX = 0;
+    this.player.velocityY = 0;
+    
+    console.log('✅ Game restarted!');
+}
+
+    /**
      * Update game state
      * Called every frame
      */
@@ -349,6 +709,9 @@ renderCelebration() {
     // Update celebration state
     this.updateCelebration();   
 
+    // Update victory state
+    this.updateVictory();
+
     //Always process input and update particles, even during celebration, to keep things responsive and animated        
     this.processInput();
 
@@ -356,12 +719,19 @@ renderCelebration() {
      if (this.isCelebrating) {
         // Still update particles so fireworks animate
         this.particles = this.particles.filter(particle => particle.update());
-
         //Stop player movement during celebration for better visual focus
         this.player.velocityX = 0;
         this.player.velocityY = 0; 
 
         return;  // Skip player movement and fruit collection
+    }
+
+    // If in victory state, pause gameplay but update particles
+    if (this.isVictory) {
+        this.particles = this.particles.filter(particle => particle.update());
+        this.player.velocityX = 0;
+        this.player.velocityY = 0;
+        return;
     }
 
     this.player.update(this.canvas.width, this.canvas.height);
@@ -385,6 +755,12 @@ renderCelebration() {
     // Check for milestone achievements
     if (this.score >= this.nextMilestone && !this.isCelebrating) {
       this.triggerCelebration();
+    }
+
+    // Check for victory condition
+    const fruitsRemaining = this.fruits.filter(f => !f.collected).length;
+    if (fruitsRemaining === 0 && !this.isVictory && !this.isCelebrating) {
+        this.triggerVictory();
     }
 
     //Update particles and remove dead ones
@@ -418,11 +794,13 @@ render() {
     this.ctx.fillText(`Score: ${this.score}`, 20, 40);
     
     // Player UI
-this.ctx.font = '18px Arial';
-this.ctx.fillText(`Next Milestone: ${this.nextMilestone}`, 20, 70);
-this.ctx.fillText(`Fruits: ${this.fruits.filter(f => !f.collected).length}/${this.fruits.length}`, 20, 95);
+    this.ctx.font = '18px Arial';
+    this.ctx.fillText(`Next Milestone: ${this.nextMilestone}`, 20, 70);
+    this.ctx.fillText(`Fruits: ${this.fruits.filter(f => !f.collected).length}/${this.fruits.length}`, 20, 95);
     // Render celebration effects on top of everything
     this.renderCelebration();
+    // Render victory effects on top of everything
+    this.renderVictory();
 }
     /**
      * Main game loop
