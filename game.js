@@ -41,18 +41,27 @@ constructor() {
     
     console.log('Initial score:', this.score);
     
-    // Celebration system
-    this.isCelebrating = false;
-    this.celebrationTimer = 0;
-    this.celebrationDuration = 30;  // frames (0.5 seconds at 60fps)
-    this.nextMilestone = 250;  // First milestone at 250 points
-    this.milestones = [250, 500, 750, 1000, 1500, 2000];  // All milestones
+// Game State Machine
+// Valid states: PLAYING, CELEBRATING, VICTORY_ANIMATION, VICTORY_SCREEN
+this.STATES = {
+    PLAYING: 'PLAYING',
+    CELEBRATING: 'CELEBRATING',
+    VICTORY_ANIMATION: 'VICTORY_ANIMATION',
+    VICTORY_SCREEN: 'VICTORY_SCREEN'
+};
 
-    //Victory system
-    this.isVictory = false;
-    this.victoryTimer = 0;
-    this.victoryDuration = 120; // 2 seconds at 60fps
-    this.showVictoryScreen = false;
+this.gameState = this.STATES.PLAYING;
+
+// State timers (used by multiple states)
+this.stateTimer = 0;
+
+// Milestone system
+this.nextMilestone = 250;
+this.milestones = [250, 500, 750, 1000, 1500, 2000];
+
+// Configuration constants
+this.CELEBRATION_DURATION = 30;  // frames (0.5 seconds at 60fps)
+this.VICTORY_ANIMATION_DURATION = 120;  // 2 seconds
 
     this.generateFruits(105);
     
@@ -72,6 +81,156 @@ constructor() {
     this.start();
     
     console.log('═══════════════════════════════════════');
+}
+
+/**
+ * Transition to a new game state
+ * 
+ * STATE MACHINE CORE: Single method for all transitions
+ * - Logs transitions for debugging
+ * - Resets timers automatically
+ * - Validates state transitions
+ * 
+ * @param {string} newState - State to transition to
+ */
+transitionToState(newState) {
+    const oldState = this.gameState;
+    
+    // Validate state exists
+    if (!Object.values(this.STATES).includes(newState)) {
+        console.error(`Invalid state: ${newState}`);
+        return;
+    }
+    
+    // Log transition
+    console.log(`🔄 State: ${oldState} → ${newState}`);
+    
+    // Execute exit logic for old state
+    this.exitState(oldState);
+    
+    // Change state
+    this.gameState = newState;
+    
+    // Execute entry logic for new state
+    this.enterState(newState);
+}
+
+/**
+ * Entry logic when entering a state
+ * 
+ * @param {string} state - State being entered
+ */
+enterState(state) {
+    switch(state) {
+        case this.STATES.PLAYING:
+            // Nothing special on enter
+            break;
+            
+        case this.STATES.CELEBRATING:
+            this.stateTimer = this.CELEBRATION_DURATION;
+            this.spawnCelebrationParticles();
+            this.soundManager.playCelebration();
+            console.log(`🎉 MILESTONE REACHED: ${this.nextMilestone} points!`);
+            this.updateNextMilestone();
+            break;
+            
+        case this.STATES.VICTORY_ANIMATION:
+            this.stateTimer = this.VICTORY_ANIMATION_DURATION;
+            this.spawnVictoryParticles();
+            this.soundManager.playCelebration();
+            console.log('🏆 VICTORY! All fruits collected!');
+            break;
+            
+        case this.STATES.VICTORY_SCREEN:
+            console.log('🎊 Showing victory screen');
+            break;
+    }
+}
+
+/**
+ * Exit logic when leaving a state
+ * 
+ * @param {string} state - State being exited
+ */
+exitState(state) {
+    switch(state) {
+        case this.STATES.CELEBRATING:
+            console.log('🎮 Celebration ended - gameplay resumed');
+            break;
+            
+        case this.STATES.VICTORY_ANIMATION:
+            // Animation complete, ready for screen
+            break;
+            
+        case this.STATES.VICTORY_SCREEN:
+            // Exiting victory screen (restart)
+            break;
+    }
+}
+
+/**
+ * Update next milestone after reaching one
+ * Handles both predefined and dynamic milestones
+ */
+updateNextMilestone() {
+    let foundNext = false;
+    
+    for (let milestone of this.milestones) {
+        if (milestone > this.score) {
+            this.nextMilestone = milestone;
+            foundNext = true;
+            break;
+        }
+    }
+    
+    // Dynamic milestone generation after 2000
+    if (!foundNext) {
+        this.nextMilestone = Math.ceil((this.score + 1) / 500) * 500;
+        console.log(`✨ Dynamic milestone generated: ${this.nextMilestone}`);
+    }
+}
+
+/**
+ * Spawn celebration particles (milestone reached)
+ */
+spawnCelebrationParticles() {
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    for (let i = 0; i < 50; i++) {
+        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        const particle = new Particle(centerX, centerY, randomColor);
+        particle.velocityX *= 2;
+        particle.velocityY *= 2;
+        particle.velocityY -= 3;
+        particle.size *= 1.5;
+        
+        this.particles.push(particle);
+    }
+}
+
+/**
+ * Spawn victory particles (all fruits collected)
+ */
+spawnVictoryParticles() {
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    for (let i = 0; i < 100; i++) {
+        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565', '#fbbf24'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        
+        const particle = new Particle(centerX, centerY, randomColor);
+        particle.velocityX *= 3;
+        particle.velocityY *= 3;
+        particle.velocityY -= 4;
+        particle.size *= 2;
+        particle.fadeRate = 0.015;
+        
+        this.particles.push(particle);
+    }
 }
     /**
  * Draw text that automatically scales to fit within a maximum width
@@ -145,7 +304,7 @@ drawResponsiveText(text, x, y, maxWidth, desiredSize, weight = 'bold', color = '
             }
 
             //Restart game on spacebar if victory screen is showing
-            if (e.key === ' ' && this.showVictoryScreen) {
+            if (e.key === ' ' && this.gameState === this.STATES.VICTORY_SCREEN) {
                 e.preventDefault();
                 this.restartGame();
             }
@@ -167,7 +326,7 @@ drawResponsiveText(text, x, y, maxWidth, desiredSize, weight = 'bold', color = '
 setupMouseInput() {
     this.canvas.addEventListener('click', (e) => {
         // Only handle clicks when victory screen is showing
-        if (!this.showVictoryScreen) return;
+        if (this.gameState !== this.STATES.VICTORY_SCREEN) return;
         
         // Get mouse position relative to canvas
         const rect = this.canvas.getBoundingClientRect();
@@ -293,126 +452,48 @@ spawnParticles(x, y, color, count = 10) {
 }
 
 /**
- * Trigger a milestone celebration
- * 
- * STATE MACHINE: PLAYING → CELEBRATING
- * - Pauses normal gameplay
- * - Spawns celebration effects
- * - Plays celebration sound
- */
-triggerCelebration() {
-    this.isCelebrating = true;
-    this.celebrationTimer = this.celebrationDuration;
-    
-    console.log(`🎉 MILESTONE REACHED: ${this.nextMilestone} points!`);
-    
-    // Spawn firework particles from center of screen
-    const centerX = this.canvas.width / 2;
-    const centerY = this.canvas.height / 2;
-    
-    // Create 50 colorful particles in random directions
-    for (let i = 0; i < 50; i++) {
-        // Random rainbow colors for fireworks
-        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565'];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-        
-        // Create particle with extra velocity for explosion effect
-        const particle = new Particle(centerX, centerY, randomColor);
-        particle.velocityX *= 2;  // Double the velocity for bigger explosion
-        particle.velocityY *= 2;
-        particle.velocityY -= 3;  // Extra upward bias
-        particle.size *= 1.5;     // Bigger particles
-        
-        this.particles.push(particle);
-    }
-    
-    // Play celebration sound
-    this.soundManager.playCelebration();
-    
-    // Find next milestone
-    let foundNext = false
-    for (let milestone of this.milestones) {
-        if (milestone > this.score) {
-            this.nextMilestone = milestone;
-            foundNext = true;
-            break;
-        }
-    }
-
-    if (!foundNext) {
-        this.nextMilestone = Math.ceil((this.score + 1) / 500) * 500;  // Next milestone at next 500 points
-        console.log(`🎊 New milestone generated: ${this.nextMilestone}`);
-    }
-}
-
-/**
- * Update celebration state
- * 
- * STATE MACHINE: CELEBRATING → PLAYING
- * - Counts down timer
- * - When timer reaches 0, resume gameplay
- */
-updateCelebration() {
-    if (!this.isCelebrating) return;
-    
-    this.celebrationTimer--;
-    
-    if (this.celebrationTimer <= 0) {
-        this.isCelebrating = false;
-        console.log('🎮 Celebration ended - gameplay resumed');
-    }
-}
-
-/**
  * Render celebration overlay
- * 
- * VISUAL EFFECTS:
- * - Screen flash (white fade)
- * - Milestone text
- * - Particle explosion (already rendering)
+ * Uses stateTimer for flash intensity
  */
 renderCelebration() {
-    if (!this.isCelebrating) return;
-    
-    // Calculate flash intensity (fade from bright to invisible)
-    const flashIntensity = this.celebrationTimer / this.celebrationDuration;
+    // Calculate flash intensity based on timer
+    const flashIntensity = this.stateTimer / this.CELEBRATION_DURATION;
     
     // White screen flash
     this.ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.4})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    // Milestone text (responsive)
+    // Milestone text
     this.ctx.textAlign = 'center';
-
-   const maxWidth = this.canvas.width * 0.9;
-   const centerX = this.canvas.width / 2;
-const centerY = this.canvas.height / 2;
-
-   this.drawResponsiveText(
-    'MILESTONE!',
-    centerX,
-    centerY - 30,
-    maxWidth,
-    48,
-    'bold',
-    'white',
-    true  // Add stroke
-);
-
-   this.drawResponsiveText(
-    `${this.score} POINTS`,
-    centerX,
-    centerY + 20,
-    maxWidth,
-    32,
-    'bold',
-    'white',
-    true  // Add stroke
-);
-
-// Reset text alignment
-   this.ctx.textAlign = 'left';
-}  
+    
+    const maxWidth = this.canvas.width * 0.9;
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    
+    this.drawResponsiveText(
+        'MILESTONE!',
+        centerX,
+        centerY - 30,
+        maxWidth,
+        48,
+        'bold',
+        'white',
+        true
+    );
+    
+    this.drawResponsiveText(
+        `${this.score} POINTS`,
+        centerX,
+        centerY + 20,
+        maxWidth,
+        32,
+        'bold',
+        'white',
+        true
+    );
+    
+    this.ctx.textAlign = 'left';
+} 
     /**
      * Process input and update player velocity
      * 
@@ -439,103 +520,35 @@ const centerY = this.canvas.height / 2;
         this.player.setVelocity(vx, vy);
     }
     
-    /**
- * Trigger victory sequence
- * 
- * STATE TRANSITION: PLAYING → VICTORY
- * - Final celebration
- * - Victory timer countdown
- * - Then show victory screen
+/**
+ * Render victory animation overlay
+ * Initial 2-second celebration before showing screen
  */
-triggerVictory() {
-    this.isVictory = true;
-    this.victoryTimer = this.victoryDuration;
+renderVictoryAnimation() {
+    // Gold screen flash
+    const flashIntensity = this.stateTimer / this.VICTORY_ANIMATION_DURATION;
+    this.ctx.fillStyle = `rgba(251, 191, 36, ${flashIntensity * 0.3})`;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    console.log('🏆 VICTORY! All fruits collected!');
+    // Victory text
+    this.ctx.textAlign = 'center';
     
-    // Massive celebration explosion
+    const maxWidth = this.canvas.width * 0.9;
     const centerX = this.canvas.width / 2;
     const centerY = this.canvas.height / 2;
     
-    // Create 100 rainbow particles for epic victory celebration
-    for (let i = 0; i < 100; i++) {
-        const colors = ['#e53e3e', '#dd6b20', '#ecc94b', '#48bb78', '#4299e1', '#9f7aea', '#f56565', '#fbbf24'];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-        
-        const particle = new Particle(centerX, centerY, randomColor);
-        particle.velocityX *= 3;  // Even bigger explosion than milestone
-        particle.velocityY *= 3;
-        particle.velocityY -= 4;  // Extra upward force
-        particle.size *= 2;       // Larger particles
-        particle.fadeRate = 0.015;  // Fade slower (linger longer)
-        
-        this.particles.push(particle);
-    }
+    this.drawResponsiveText(
+        'VICTORY!',
+        centerX,
+        centerY,
+        maxWidth,
+        64,
+        'bold',
+        'white',
+        true
+    );
     
-    // Play celebration sound
-    this.soundManager.playCelebration();
-    
-    // After a delay, we'll stop playing the sound repeatedly
-    // by checking if victory screen is showing
-}
-
-/**
- * Update victory state
- * 
- * STATE PROGRESSION: VICTORY → VICTORY_SCREEN
- */
-updateVictory() {
-    if (!this.isVictory) return;
-    
-    this.victoryTimer--;
-    
-    if (this.victoryTimer <= 0) {
-        this.showVictoryScreen = true;
-        console.log('🎊 Showing victory screen');
-    }
-}
-
-/**
- * Render victory overlay
- * 
- * VISUAL ELEMENTS:
- * - Screen flash (gold)
- * - Victory text
- * - Final score
- * - Play again button (when timer expires)
- */
-renderVictory() {
-    if (!this.isVictory) return;
-    
-    // Gold screen flash during initial celebration
-    if (!this.showVictoryScreen) {
-        const flashIntensity = this.victoryTimer / this.victoryDuration;
-        this.ctx.fillStyle = `rgba(251, 191, 36, ${flashIntensity * 0.3})`;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Victory text during celebration
-        this.ctx.textAlign = 'center';
-        
-        const maxWidth = this.canvas.width * 0.9;
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        
-        this.drawResponsiveText(
-            'VICTORY!',
-            centerX,
-            centerY,
-            maxWidth,
-            64,
-            'bold',
-            'white',
-            true
-        );
-        
-        this.ctx.textAlign = 'left';
-    } else {
-        // Full victory screen
-        this.renderVictoryScreen();
-    }
+    this.ctx.textAlign = 'left';
 }
 
 /**
@@ -658,150 +671,201 @@ renderVictoryScreen() {
 
 /**
  * Restart the game
- * 
- * STATE TRANSITION: VICTORY → PLAYING
- * - Reset score
- * - Clear particles
- * - Regenerate fruits
- * - Reset milestones
- * - Resume gameplay
+ * Resets all state and regenerates fruits
  */
-   restartGame() {
+restartGame() {
     console.log('🔄 Restarting game...');
     
     // Reset game state
     this.score = 0;
-    this.isVictory = false;
-    this.showVictoryScreen = false;
-    this.victoryTimer = 0;
-    this.isCelebrating = false;
-    this.celebrationTimer = 0;
     this.nextMilestone = 250;
+    this.stateTimer = 0;
     
-    // Clear particles
+    // Clear dynamic objects
     this.particles = [];
-    
-    // Clear old fruits and generate new ones
     this.fruits = [];
+    
+    // Regenerate fruits
     this.generateFruits(105);
     
-    // Reset player to center
+    // Reset player position
     this.player.x = this.canvas.width / 2 - 16;
     this.player.y = this.canvas.height / 2 - 16;
     this.player.velocityX = 0;
     this.player.velocityY = 0;
     
+    // Transition to PLAYING state
+    this.transitionToState(this.STATES.PLAYING);
+    
     console.log('✅ Game restarted!');
 }
 
-    /**
-     * Update game state
-     * Called every frame
-     */
-   update() {
+/**
+ * Update game state
+ * Called every frame
+ * 
+ * STATE MACHINE: Delegates to state-specific update methods
+ */
+update() {
     this.frameCount++;
     
-    // Log first 5 frames to see what's happening
-    if (this.frameCount <= 5) {
-        console.log(`Frame ${this.frameCount}: Score = ${this.score}, Player = (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})`);
-    }
-    
-    // Update celebration state
-    this.updateCelebration();   
-
-    // Update victory state
-    this.updateVictory();
-
-    //Always process input and update particles, even during celebration, to keep things responsive and animated        
+    // Always process input (keeps key states fresh)
     this.processInput();
-
-        // If celebrating, skip normal updates (pause gameplay)     
-     if (this.isCelebrating) {
-        // Still update particles so fireworks animate
-        this.particles = this.particles.filter(particle => particle.update());
-        //Stop player movement during celebration for better visual focus
-        this.player.velocityX = 0;
-        this.player.velocityY = 0; 
-
-        return;  // Skip player movement and fruit collection
+    
+    // Always update particles (animations continue in all states)
+    this.particles = this.particles.filter(particle => particle.update());
+    
+    // State-specific updates
+    switch(this.gameState) {
+        case this.STATES.PLAYING:
+            this.updatePlaying();
+            break;
+            
+        case this.STATES.CELEBRATING:
+            this.updateCelebrating();
+            break;
+            
+        case this.STATES.VICTORY_ANIMATION:
+            this.updateVictoryAnimation();
+            break;
+            
+        case this.STATES.VICTORY_SCREEN:
+            this.updateVictoryScreen();
+            break;
     }
+}
 
-    // If in victory state, pause gameplay but update particles
-    if (this.isVictory) {
-        this.particles = this.particles.filter(particle => particle.update());
-        this.player.velocityX = 0;
-        this.player.velocityY = 0;
-        return;
-    }
-
+/**
+ * Update logic for PLAYING state
+ */
+updatePlaying() {
+    // Update player physics
     this.player.update(this.canvas.width, this.canvas.height);
     
     // Check fruit collisions
     this.fruits.forEach(fruit => {
         if (!fruit.collected && fruit.checkCollision(this.player)) {
-    fruit.collected = true;
-    this.score += fruit.points;  // ← Use fruit's points (10, 25, 50, or 100)
-    this.soundManager.playCollect(fruit.rarity);  // ← Play sound based on rarity   
-    
-    const centerX = fruit.x + fruit.width / 2;
-    const centerY = fruit.y + fruit.height / 2;
-    this.spawnParticles(centerX, centerY, fruit.color, fruit.particleCount);  // ← Use fruit's particle count
-    
-    // Enhanced logging with rarity
-    console.log(`🍎 Collected ${fruit.rarity} ${fruit.type}! +${fruit.points} points. Score: ${this.score}`);
-}
+            fruit.collected = true;
+            this.score += fruit.points;
+            this.soundManager.playCollect(fruit.rarity);
+            
+            const centerX = fruit.x + fruit.width / 2;
+            const centerY = fruit.y + fruit.height / 2;
+            this.spawnParticles(centerX, centerY, fruit.color, fruit.particleCount);
+            
+            console.log(`🍎 Collected ${fruit.rarity} ${fruit.type}! +${fruit.points} points. Score: ${this.score}`);
+        }
     });
-
-    // Check for milestone achievements
-    if (this.score >= this.nextMilestone && !this.isCelebrating) {
-      this.triggerCelebration();
+    
+    // Check for milestone
+    if (this.score >= this.nextMilestone) {
+        this.transitionToState(this.STATES.CELEBRATING);
+        return;  // Stop processing this frame
     }
-
-    // Check for victory condition
+    
+    // Check for victory
     const fruitsRemaining = this.fruits.filter(f => !f.collected).length;
-    if (fruitsRemaining === 0 && !this.isVictory && !this.isCelebrating) {
-        this.triggerVictory();
+    if (fruitsRemaining === 0) {
+        this.transitionToState(this.STATES.VICTORY_ANIMATION);
+        return;
     }
+}
 
-    //Update particles and remove dead ones
-    //filter() keeps only particles that return true from update() (still alive)
-    this.particles = this.particles.filter(particle => particle.update());
+/**
+ * Update logic for CELEBRATING state
+ */
+updateCelebrating() {
+    // Freeze player during celebration
+    this.player.velocityX = 0;
+    this.player.velocityY = 0;
+    
+    // Countdown timer
+    this.stateTimer--;
+    
+    if (this.stateTimer <= 0) {
+        this.transitionToState(this.STATES.PLAYING);
+    }
+}
+
+/**
+ * Update logic for VICTORY_ANIMATION state
+ */
+updateVictoryAnimation() {
+    // Freeze player during victory animation
+    this.player.velocityX = 0;
+    this.player.velocityY = 0;
+    
+    // Countdown timer
+    this.stateTimer--;
+    
+    if (this.stateTimer <= 0) {
+        this.transitionToState(this.STATES.VICTORY_SCREEN);
+    }
+}
+
+/**
+ * Update logic for VICTORY_SCREEN state
+ */
+updateVictoryScreen() {
+    // Freeze player
+    this.player.velocityX = 0;
+    this.player.velocityY = 0;
+    
+    // Waiting for user input (handled in setupInput and setupMouseInput)
 }
     
     /**
-     * Render everything to canvas
-     * 
-     * PERFORMANCE PATTERN: Clear -> Draw
-     * Always clear before redrawing to prevent ghosting
-     */
+ * Render everything to canvas
+ * 
+ * STATE MACHINE: Renders appropriate overlays based on state
+ */
 render() {
     // Clear canvas
     this.ctx.fillStyle = '#2d3748';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    // Render fruits
+    // Render game objects (always visible)
     this.fruits.forEach(fruit => fruit.render(this.ctx));
-    
-    // Render particles (on top of fruits but below player)
-    this.particles.forEach(particle => particle.render(this.ctx));  
-
-    // Render player (player on top of fruits)
+    this.particles.forEach(particle => particle.render(this.ctx));
     this.player.render(this.ctx);
     
-    // Render score and diagnostics
+    // Render UI (always visible)
+    this.renderUI();
+    
+    // Render state-specific overlays
+    switch(this.gameState) {
+        case this.STATES.PLAYING:
+            // No overlay
+            break;
+            
+        case this.STATES.CELEBRATING:
+            this.renderCelebration();
+            break;
+            
+        case this.STATES.VICTORY_ANIMATION:
+            this.renderVictoryAnimation();
+            break;
+            
+        case this.STATES.VICTORY_SCREEN:
+            this.renderVictoryScreen();
+            break;
+    }
+}
+
+/**
+ * Render UI elements (score, milestone, fruits remaining)
+ */
+renderUI() {
     this.ctx.fillStyle = 'white';
     this.ctx.font = '24px Arial';
     this.ctx.fillText(`Score: ${this.score}`, 20, 40);
     
-    // Player UI
     this.ctx.font = '18px Arial';
     this.ctx.fillText(`Next Milestone: ${this.nextMilestone}`, 20, 70);
     this.ctx.fillText(`Fruits: ${this.fruits.filter(f => !f.collected).length}/${this.fruits.length}`, 20, 95);
-    // Render celebration effects on top of everything
-    this.renderCelebration();
-    // Render victory effects on top of everything
-    this.renderVictory();
 }
+
+
     /**
      * Main game loop
      * 
