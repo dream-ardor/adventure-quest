@@ -38,6 +38,10 @@ constructor() {
     this.soundManager = new SoundManager();
     this.particles = [];
     this.score = 0;
+
+    //Background elements
+    this.backgroundElements = [];
+    this.generateBackground();
     
     console.log('Initial score:', this.score);
     
@@ -433,6 +437,89 @@ generateFruits(count) {
 }
 
 /**
+ * Generate background decoration elements
+ * 
+ * DESIGN: Layered approach
+ * - Background layer (faded, behind everything)
+ * - Foreground layer (subtle, in front of fruits but behind player)
+ * 
+ * PLACEMENT: Random but not overlapping with spawn area
+ */
+generateBackground() {
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    const spawnRadius = 100;  // Keep clear of player spawn
+    
+    // Background layer elements (trees, grass, rocks)
+    const backgroundTypes = [
+        { type: 'tree', count: 8 },
+        { type: 'grass', count: 12 },
+        { type: 'rock', count: 6 }
+    ];
+    
+    backgroundTypes.forEach(({ type, count }) => {
+        for (let i = 0; i < count; i++) {
+            let x, y, tooClose;
+            let attempts = 0;
+            
+            do {
+                x = Math.random() * (this.canvas.width - 60);
+                y = Math.random() * (this.canvas.height - 60);
+                
+                // Check distance from spawn point
+                const dx = centerX - x;
+                const dy = centerY - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                tooClose = distance < spawnRadius;
+                attempts++;
+            } while (tooClose && attempts < 20);
+            
+            if (attempts < 20) {
+                this.backgroundElements.push(
+                    new BackgroundElement(x, y, type, 'background')
+                );
+            }
+        }
+    });
+    
+    // Clouds (drift across sky)
+    for (let i = 0; i < 4; i++) {
+        const x = Math.random() * this.canvas.width;
+        const y = Math.random() * (this.canvas.height * 0.3);  // Top 30% of screen
+        this.backgroundElements.push(
+            new BackgroundElement(x, y, 'cloud', 'background')
+        );
+    }
+    
+    // Foreground flowers (few, scattered)
+    for (let i = 0; i < 5; i++) {
+        let x, y, tooClose;
+        let attempts = 0;
+        
+        do {
+            x = Math.random() * (this.canvas.width - 20);
+            y = Math.random() * (this.canvas.height - 20);
+            
+            const dx = centerX - x;
+            const dy = centerY - y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            tooClose = distance < spawnRadius;
+            attempts++;
+        } while (tooClose && attempts < 20);
+        
+        if (attempts < 20) {
+            this.backgroundElements.push(
+                new BackgroundElement(x, y, 'flower', 'foreground')
+            );
+        }
+    }
+    
+    console.log(`🌳 Background generated: ${this.backgroundElements.length} elements`);
+}
+
+/**
  * Spawn particles for visual feedback
  * 
  * @param {number} x - Center X position
@@ -756,6 +843,9 @@ updatePlaying() {
             console.log(`🍎 Collected ${fruit.rarity} ${fruit.type}! +${fruit.points} points. Score: ${this.score}`);
         }
     });
+
+    // Update background elements ()
+    this.backgroundElements.forEach(element => element.update(this.canvas.width));  
     
     // Check for milestone
     if (this.score >= this.nextMilestone) {
@@ -814,38 +904,41 @@ updateVictoryScreen() {
     // Waiting for user input (handled in setupInput and setupMouseInput)
 }
     
-    /**
- * Render everything to canvas
- * 
- * STATE MACHINE: Renders appropriate overlays based on state
- */
-render() {
+   render() {
     // Clear canvas
     this.ctx.fillStyle = '#2d3748';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    // Render game objects (always visible)
+    // Layer 1: Background elements (trees, clouds, grass)
+    this.backgroundElements
+        .filter(el => el.layer === 'background')
+        .forEach(element => element.render(this.ctx));
+    
+    // Layer 2: Game objects (fruits)
     this.fruits.forEach(fruit => fruit.render(this.ctx));
+    
+    // Layer 3: Foreground decoration (flowers)
+    this.backgroundElements
+        .filter(el => el.layer === 'foreground')
+        .forEach(element => element.render(this.ctx));
+    
+    // Layer 4: Particles and player
     this.particles.forEach(particle => particle.render(this.ctx));
     this.player.render(this.ctx);
     
-    // Render UI (always visible)
+    // Layer 5: UI (always on top)
     this.renderUI();
     
-    // Render state-specific overlays
+    // Layer 6: State overlays (celebrations, victory)
     switch(this.gameState) {
         case this.STATES.PLAYING:
-            // No overlay
             break;
-            
         case this.STATES.CELEBRATING:
             this.renderCelebration();
             break;
-            
         case this.STATES.VICTORY_ANIMATION:
             this.renderVictoryAnimation();
             break;
-            
         case this.STATES.VICTORY_SCREEN:
             this.renderVictoryScreen();
             break;
